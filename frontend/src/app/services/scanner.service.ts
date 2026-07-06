@@ -14,6 +14,8 @@ const API = `${environment.apiBase}/api/scanner`;
 export interface ScanResult {
   resume: {
     candidateName: string;
+    position: string;
+    positionSource: 'explicit' | 'inferred' | 'none';
     email: string;
     phone: string;
     location: string;
@@ -33,6 +35,16 @@ export interface ScanResult {
     extraSkills: string[];
     matchedKeywords: string[];
     missingKeywords: string[];
+    location: {
+      resume: string;
+      job: string;
+      matches: boolean;
+    };
+    jobTitle: {
+      resume: string;
+      job: string;
+      matches: boolean;
+    };
     experience: { required: number; candidate: number; meets: boolean };
     suggestions: string[];
   };

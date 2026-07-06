@@ -56,7 +56,7 @@ button {
   border: none;
   border-radius: var(--radius);
   padding: 0.6rem 1.15rem;
-  background: var(--primary-grad);
+  background: var(--primary-active);
   color: #fff;
   font-weight: 500;
   transition: all 0.15s ease;

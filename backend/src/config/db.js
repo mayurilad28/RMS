@@ -34,7 +34,8 @@ async function connectDB() {
 
   const uri = process.env.MONGO_URI;
   if (!uri) {
-    throw new Error('MONGO_URI is not set in .env');
+    console.warn('MONGO_URI is not set — skipping MongoDB connection (dev only)');
+    return Promise.resolve();
   }
 
   // Serverless-friendly pool defaults — small pool and quick server

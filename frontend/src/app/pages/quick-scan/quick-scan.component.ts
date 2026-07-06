@@ -74,7 +74,7 @@ type ScanStage = 'idle' | 'uploading' | 'analyzing';
             <input
               type="file"
               hidden
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.tiff,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,text/plain"
               (change)="onFileSelected($event)"
             />
             <span>Choose file</span>
@@ -185,8 +185,8 @@ type ScanStage = 'idle' | 'uploading' | 'analyzing';
     }
 
     <!-- ===== STEP 3: Results ============================================ -->
-    @if (step() === 3 && result(); as r) {
-      <div class="tab-bar">
+    @if (result(); as r) {
+        <div class="tab-bar">
         <button
           class="tab"
           [class.active]="tab() === 'resume'"
@@ -338,16 +338,7 @@ type ScanStage = 'idle' | 'uploading' | 'analyzing';
                 </div>
               </div>
             </div>
-          </div>
-
-          <div class="card">
-            <h3>Suggestions</h3>
-            <ul class="tips">
-              @for (s of r.match.suggestions; track s) {
-                <li>{{ s }}</li>
-              }
-            </ul>
-          </div>
+          </div>         
 
           <div class="card">
             <h3>Matched skills ({{ r.match.matchedSkills.length }})</h3>
@@ -388,6 +379,34 @@ type ScanStage = 'idle' | 'uploading' | 'analyzing';
             >
               {{ r.match.experience.meets ? '✓ You meet the experience requirement' : '✗ Below the requested experience' }}
             </p>
+          </div>
+
+          <div class="card">
+            <h3>Position</h3>
+            @if (r.resume.position || r.match.jobTitle.job) {
+              <div>
+                @if (r.resume.position) {
+                  <p><strong>Resume position:</strong> {{ r.resume.position }}</p>
+                  @if (r.resume.positionSource === 'inferred') {
+                    <p class="hint">Title inferred from resume content; may be approximate.</p>
+                  }
+                } @else {
+                  <p class="muted">Resume position not detected</p>
+                }
+                @if (r.match.jobTitle.job) {
+                  <p><strong>JD title:</strong> {{ r.match.jobTitle.job }}</p>
+                } @else {
+                  <p class="muted">JD title not detected</p>
+                }
+                @if (r.resume.position && r.match.jobTitle.job) {
+                  <p [class.ok-text]="r.match.jobTitle.matches" [class.miss-text]="!r.match.jobTitle.matches">
+                    {{ r.match.jobTitle.matches ? '✓ Position matches the JD' : '✗ Position does not match the JD' }}
+                  </p>
+                }
+              </div>
+            } @else {
+              <p class="muted">No position title found in resume or JD.</p>
+            }
           </div>
 
           <div class="card">
@@ -469,686 +488,7 @@ type ScanStage = 'idle' | 'uploading' | 'analyzing';
       </div>
     }
   `,
-  styles: [
-    `
-      :host {
-        /* local design tokens — easy to tweak in one place */
-        --coral-50:  #faf4f3;
-        --coral-100: #fce0de;
-        --coral-200: #fbcfcd;
-        --coral-300: #ff8c87;
-        --coral-400: #ff7672;
-        --coral-500: #ff5e59;
-        --coral-600: #ed4a45;
-        --coral-700: #d63b37;
-        --slate-50:  #f8fafc;
-        --slate-100: #f1f5f9;
-        --slate-200: #e2e8f0;
-        --slate-300: #cbd5e1;
-        --slate-400: #94a3b8;
-        --slate-500: #64748b;
-        --slate-600: #475569;
-        --slate-700: #334155;
-        --slate-900: #0f172a;
-        --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
-        --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
-        --radius: 12px;
-      }
-
-      :host .card {
-        background: #fff;
-        border: 1px solid var(--slate-200);
-        border-radius: var(--radius);
-        padding: 1.25rem;
-        box-shadow: var(--shadow-sm);
-      }
-
-      /* Hero */
-      .hero {
-        text-align: center;
-        margin-bottom: 2rem;
-        padding-top: 0.5rem;
-      }
-      .hero h1 {
-        margin: 0;
-        font-size: 2.1rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        background: linear-gradient(120deg, #1e293b 30%, var(--coral-600) 90%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-      }
-      .subtitle {
-        color: var(--slate-500);
-        margin: 0.6rem 0 0;
-        font-size: 1rem;
-      }
-      .accent {
-        background: linear-gradient(120deg, var(--coral-500), var(--coral-700));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        font-weight: 700;
-        font-size: 1.15em;
-      }
-
-      /* Stepper */
-      .stepper {
-        list-style: none;
-        display: flex;
-        justify-content: center;
-        gap: 0;
-        padding: 0;
-        margin: 2rem auto 2.25rem;
-        max-width: 480px;
-      }
-      .stepper li {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        flex: 1;
-        position: relative;
-        color: var(--slate-400);
-        transition: color 0.2s ease;
-      }
-      .stepper li:not(:last-child)::after {
-        content: '';
-        position: absolute;
-        top: 17px;
-        left: calc(50% + 22px);
-        right: calc(-50% + 22px);
-        height: 2px;
-        background: var(--slate-200);
-        z-index: 0;
-        transition: background 0.3s ease;
-      }
-      .stepper li.done:not(:last-child)::after {
-        background: linear-gradient(90deg, var(--coral-500), var(--coral-600));
-      }
-      .circle {
-        width: 36px;
-        height: 36px;
-        border-radius: 999px;
-        border: 2px solid var(--slate-200);
-        background: #fff;
-        display: grid;
-        place-items: center;
-        font-weight: 600;
-        font-size: 0.9rem;
-        z-index: 1;
-        color: var(--slate-400);
-        transition: all 0.25s ease;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-      }
-      .stepper li.active .circle {
-        background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
-        color: #fff;
-        border-color: var(--coral-600);
-        transform: scale(1.08);
-        box-shadow: 0 6px 16px rgba(255, 94, 89, 0.35);
-      }
-      .stepper li.done .circle {
-        background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
-        color: #fff;
-        border-color: var(--coral-600);
-      }
-      .stepper li.active,
-      .stepper li.done {
-        color: var(--slate-900);
-      }
-      .label {
-        margin-top: 0.55rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-      }
-
-      /* Dropzone */
-      .dropzone {
-        border: 2px dashed var(--slate-300);
-        border-radius: 16px;
-        padding: 3rem 1.5rem;
-        text-align: center;
-        background: #fff;
-        transition: all 0.2s ease;
-        cursor: default;
-      }
-      .dropzone:hover {
-        border-color: var(--coral-500);
-        background: var(--coral-50);
-      }
-      .dropzone.dragging {
-        border-color: var(--coral-600);
-        background: var(--coral-50);
-        transform: scale(1.005);
-        box-shadow: var(--shadow-md);
-      }
-      .icon {
-        margin-bottom: 1rem;
-      }
-      .drop-text {
-        font-size: 1.05rem;
-        margin: 0;
-        color: var(--slate-700);
-        font-weight: 500;
-      }
-      .choose span {
-        color: var(--coral-600);
-        text-decoration: underline;
-        text-underline-offset: 2px;
-        cursor: pointer;
-        font-weight: 600;
-      }
-      .choose span:hover {
-        color: var(--coral-700);
-      }
-      .hint {
-        color: var(--slate-400);
-        font-size: 0.85rem;
-        margin: 0.5rem 0 0;
-      }
-      .selected {
-        margin-top: 1rem;
-        color: var(--slate-900);
-        font-size: 0.95rem;
-      }
-
-      /* Step 2 textarea */
-      textarea {
-        width: 100%;
-        font-family: inherit;
-        resize: vertical;
-        font-size: 0.95rem;
-        line-height: 1.55;
-      }
-      textarea:disabled {
-        background: var(--slate-100);
-        color: var(--slate-400);
-        cursor: not-allowed;
-      }
-      .jd-upload-row {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        margin-bottom: 1rem;
-      }
-      .jd-file-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: #ecfdf5;
-        color: #065f46;
-        padding: 0.4rem 0.85rem;
-        border-radius: 999px;
-        font-size: 0.85rem;
-        border: 1px solid #a7f3d0;
-      }
-      .remove-link {
-        color: #b91c1c;
-        text-decoration: underline;
-        cursor: pointer;
-        font-size: 0.8rem;
-      }
-      .or-divider {
-        position: relative;
-        text-align: center;
-        margin: 1.25rem 0;
-        color: var(--slate-400);
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        font-weight: 500;
-      }
-      .or-divider span {
-        background: #fff;
-        padding: 0 0.75rem;
-        position: relative;
-        z-index: 1;
-      }
-      .or-divider::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: var(--slate-200);
-      }
-
-      /* Actions */
-      .actions {
-        display: flex;
-        gap: 0.75rem;
-        justify-content: flex-end;
-        margin-top: 1.5rem;
-      }
-      .actions.center {
-        justify-content: center;
-      }
-
-      /* Tabs */
-      .tab-bar {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        background: var(--slate-100);
-        border-radius: 12px;
-        padding: 5px;
-        gap: 4px;
-        margin-bottom: 1.25rem;
-        border: 1px solid var(--slate-200);
-      }
-      .tab {
-        background: transparent;
-        color: var(--slate-500);
-        border: none;
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        font-weight: 500;
-        font-size: 0.95rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-      .tab:hover {
-        color: var(--slate-900);
-      }
-      .tab.active {
-        background: #fff;
-        color: var(--slate-900);
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
-        font-weight: 600;
-      }
-
-      .status-banner {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        background: linear-gradient(90deg, #ecfdf5, #f0fdf4);
-        border: 1px solid #a7f3d0;
-        border-radius: 12px;
-        padding: 0.85rem 1.15rem;
-        margin-bottom: 1.25rem;
-      }
-      .status-left {
-        display: flex;
-        align-items: center;
-        gap: 0.85rem;
-      }
-      .status-left .check {
-        width: 26px;
-        height: 26px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #10b981, #16a34a);
-        color: #fff;
-        display: grid;
-        place-items: center;
-        font-size: 0.85rem;
-        font-weight: 700;
-        flex-shrink: 0;
-        box-shadow: 0 2px 6px rgba(22, 163, 74, 0.3);
-      }
-      .status-left strong {
-        display: block;
-        color: #064e3b;
-        font-size: 0.95rem;
-      }
-      .status-left .muted.small {
-        color: #047857;
-        font-size: 0.8rem;
-      }
-      .tip-pill {
-        background: #dcfce7;
-        color: #166534;
-        font-size: 0.8rem;
-        padding: 0.4rem 0.85rem;
-        border-radius: 999px;
-        font-weight: 500;
-        white-space: nowrap;
-        border: 1px solid #86efac;
-      }
-
-      .swap-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        margin-bottom: 1.25rem;
-        flex-wrap: wrap;
-      }
-      .swap-bar .small {
-        font-size: 0.85rem;
-      }
-      .swap-actions {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-      .swap-btn {
-        cursor: pointer;
-      }
-      .swap-btn span {
-        display: inline-block;
-        padding: 0.6rem 1.1rem;
-        border-radius: 10px;
-        background: linear-gradient(135deg, var(--coral-500), var(--coral-600));
-        color: #fff;
-        font-size: 0.9rem;
-        font-weight: 500;
-        transition: all 0.15s ease;
-        box-shadow: 0 1px 3px rgba(255, 94, 89, 0.3);
-      }
-      .swap-btn:hover span {
-        box-shadow: 0 6px 16px rgba(255, 94, 89, 0.4);
-        transform: translateY(-1px);
-      }
-      .swap-btn.secondary span {
-        background: var(--slate-100);
-        color: var(--slate-900);
-        box-shadow: none;
-        border: 1px solid var(--slate-200);
-      }
-      .swap-btn.secondary:hover span {
-        background: var(--slate-200);
-        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
-      }
-      .swap-btn input:disabled + span {
-        opacity: 0.5;
-        cursor: not-allowed;
-        transform: none !important;
-        box-shadow: none !important;
-      }
-      .swap-btn-text {
-        background: transparent;
-        color: var(--coral-600);
-        border: none;
-        padding: 0.55rem 0.5rem;
-        font-size: 0.9rem;
-        font-weight: 500;
-        cursor: pointer;
-      }
-      .swap-btn-text:hover:not(:disabled) {
-        color: var(--coral-700);
-        text-decoration: underline;
-        text-underline-offset: 3px;
-      }
-      .swap-btn-text:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .reset-link {
-        color: var(--slate-500);
-        text-decoration: underline;
-        text-underline-offset: 2px;
-        cursor: pointer;
-        font-size: 0.9rem;
-      }
-      .reset-link:hover {
-        color: var(--slate-700);
-      }
-
-      /* Progress card */
-      .progress-card {
-        background: linear-gradient(135deg, var(--coral-50), #fff5f4);
-        border: 1px solid var(--coral-100);
-        margin: 1.25rem 0;
-      }
-      .progress-head {
-        display: flex;
-        align-items: center;
-        gap: 0.7rem;
-        color: var(--coral-700);
-      }
-      .progress-head strong {
-        flex: 1;
-        font-size: 0.95rem;
-      }
-      .progress-percent {
-        font-variant-numeric: tabular-nums;
-        color: var(--coral-600);
-        font-weight: 600;
-        font-size: 0.95rem;
-      }
-      .progress-bar {
-        margin-top: 0.7rem;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--coral-100);
-        overflow: hidden;
-      }
-      .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, var(--coral-400), var(--coral-600));
-        border-radius: 999px;
-        transition: width 0.2s ease-out;
-      }
-      .progress-fill.indeterminate {
-        width: 100% !important;
-        background: linear-gradient(
-          90deg,
-          var(--coral-100) 0%,
-          var(--coral-500) 50%,
-          var(--coral-100) 100%
-        );
-        background-size: 200% 100%;
-        animation: shimmer 1.2s linear infinite;
-      }
-      @keyframes shimmer {
-        from { background-position: 200% 0; }
-        to   { background-position: -200% 0; }
-      }
-      .progress-hint {
-        margin-top: 0.55rem;
-      }
-      .spinner {
-        width: 14px;
-        height: 14px;
-        border-radius: 999px;
-        border: 2px solid var(--coral-200);
-        border-top-color: var(--coral-600);
-        animation: spin 0.7s linear infinite;
-        display: inline-block;
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-
-      /* ===== Result grid ===== */
-      .result-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 1.25rem;
-      }
-      .result-grid .card {
-        transition: box-shadow 0.2s ease, transform 0.2s ease;
-      }
-      .result-grid .card:hover {
-        box-shadow: var(--shadow-md);
-      }
-      .result-grid h3 {
-        margin: 0 0 0.75rem;
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: var(--slate-900);
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-      }
-
-      /* ===== Score card with circular gauge ===== */
-      .score-card {
-        grid-column: 1 / -1;
-        text-align: center;
-        background: linear-gradient(135deg, #ffffff, var(--slate-50));
-        padding: 2rem 1.5rem;
-      }
-      .score-card[data-tier='high'] {
-        background: linear-gradient(135deg, #ffffff, #f0fdf4);
-      }
-      .score-card[data-tier='mid'] {
-        background: linear-gradient(135deg, #ffffff, #fffbeb);
-      }
-      .score-card[data-tier='low'] {
-        background: linear-gradient(135deg, #ffffff, #fef2f2);
-      }
-      .score-gauge {
-        position: relative;
-        width: 200px;
-        height: 200px;
-        margin: 0 auto 1.5rem;
-      }
-      .gauge-svg {
-        width: 100%;
-        height: 100%;
-        transform: rotate(-90deg);
-        filter: drop-shadow(0 4px 8px rgba(255, 94, 89, 0.2));
-      }
-      .gauge-bg {
-        fill: none;
-        stroke: var(--slate-100);
-        stroke-width: 12;
-      }
-      .gauge-fill {
-        fill: none;
-        stroke-width: 12;
-        stroke-linecap: round;
-        transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      .gauge-text {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-      }
-      .gauge-percent {
-        font-size: 3rem;
-        font-weight: 700;
-        line-height: 1;
-        color: var(--slate-900);
-        letter-spacing: -0.02em;
-        font-variant-numeric: tabular-nums;
-      }
-      .gauge-percent span {
-        font-size: 1.3rem;
-        color: var(--slate-400);
-        font-weight: 600;
-        margin-left: 2px;
-      }
-      .gauge-label {
-        color: var(--slate-500);
-        margin-top: 0.25rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-      }
-
-      /* Sub-score mini progress bars */
-      .breakdown-modern {
-        display: grid;
-        gap: 0.85rem;
-        margin-top: 1rem;
-        max-width: 480px;
-        margin-left: auto;
-        margin-right: auto;
-      }
-      .sub-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        margin-bottom: 0.35rem;
-        font-size: 0.85rem;
-        color: var(--slate-600);
-      }
-      .sub-head strong {
-        color: var(--slate-900);
-        font-variant-numeric: tabular-nums;
-      }
-      .sub-bar {
-        height: 6px;
-        border-radius: 999px;
-        background: var(--slate-100);
-        overflow: hidden;
-      }
-      .sub-fill {
-        height: 100%;
-        background: linear-gradient(90deg, var(--coral-400), var(--coral-600));
-        border-radius: 999px;
-        transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      [data-tier='high'] .sub-fill {
-        background: linear-gradient(90deg, #10b981, #22c55e);
-      }
-      [data-tier='mid'] .sub-fill {
-        background: linear-gradient(90deg, #f59e0b, #facc15);
-      }
-      [data-tier='low'] .sub-fill {
-        background: linear-gradient(90deg, #ef4444, #f87171);
-      }
-
-      /* ===== Badges ===== */
-      :host .badge {
-        display: inline-block;
-        padding: 0.3rem 0.7rem;
-        border-radius: 999px;
-        font-size: 0.78rem;
-        margin: 0.18rem;
-        font-weight: 500;
-      }
-      .badge.ok {
-        background: #dcfce7;
-        color: #166534;
-        border: 1px solid #86efac;
-      }
-      .badge.miss {
-        background: #fee2e2;
-        color: #991b1b;
-        border: 1px solid #fca5a5;
-      }
-      .badge.soft-miss {
-        background: #fef9c3;
-        color: #854d0e;
-        border: 1px solid #fde68a;
-      }
-
-      .ok-text {
-        color: #16a34a;
-        font-weight: 500;
-      }
-      .miss-text {
-        color: #dc2626;
-        font-weight: 500;
-      }
-
-      .tips {
-        margin: 0.5rem 0 0;
-        padding-left: 1.25rem;
-        color: var(--slate-700);
-      }
-      .tips li {
-        margin: 0.45rem 0;
-        line-height: 1.5;
-      }
-
-      .muted {
-        color: var(--slate-400);
-      }
-      .error {
-        color: #dc2626;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        padding: 0.6rem 0.85rem;
-        border-radius: 8px;
-        margin: 0.75rem 0 0;
-        font-size: 0.9rem;
-      }
-    `,
-  ],
+  styleUrls: ['./quick-scan.component.css'],
 })
 export class QuickScanComponent {
   private readonly scannerService = inject(ScannerService);
@@ -1196,10 +536,10 @@ export class QuickScanComponent {
   }
 
   private acceptFile(f: File): void {
-    const allowed = ['.pdf', '.doc', '.docx'];
+    const allowed = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg', '.tiff'];
     const ok = allowed.some((ext) => f.name.toLowerCase().endsWith(ext));
     if (!ok) {
-      this.fileError.set('Please choose a .pdf, .doc, or .docx file.');
+      this.fileError.set('Please choose a .pdf, .doc, .docx, .png, .jpg, .jpeg, or .tiff file.');
       return;
     }
     if (f.size > 5 * 1024 * 1024) {

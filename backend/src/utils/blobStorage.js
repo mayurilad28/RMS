@@ -9,7 +9,14 @@
  * Locally, either set it in `backend/.env` or leave uploads offline.
  */
 
-const { put, del } = require('@vercel/blob');
+let put, del;
+try {
+  ({ put, del } = require('@vercel/blob'));
+} catch (err) {
+  // @vercel/blob not installed in some local setups — fallback below
+  put = null;
+  del = null;
+}
 const path = require('path');
 const crypto = require('crypto');
 
@@ -27,14 +34,31 @@ async function uploadResumeFile(buffer, originalName, mimeType) {
   const slug = crypto.randomBytes(8).toString('hex');
   const key = `${CONTAINER}/${Date.now()}-${slug}${ext}`;
 
-  const result = await put(key, buffer, {
-    access: 'public', // Public URL. Fine for a learning project;
-    // swap to private + signed URLs when handling real HR data.
-    contentType: mimeType,
-    addRandomSuffix: false, // We already made the key unique.
-  });
+  // If the Vercel Blob client isn't available or credentials are not set,
+  // skip uploading and return an empty URL so the rest of the app can
+  // continue working in a local/dev environment.
+  const token = process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB;
+  if (!put || !token) {
+    console.warn('[warn] Vercel Blob not configured — skipping upload');
+    return { url: '', storedName: '' };
+  }
 
-  return { url: result.url, storedName: key };
+  try {
+    const result = await put(key, buffer, {
+      access: 'public', // Public URL. Fine for a learning project;
+      // swap to private + signed URLs when handling real HR data.
+      contentType: mimeType,
+      addRandomSuffix: false, // We already made the key unique.
+    });
+
+    return { url: result.url, storedName: key };
+  } catch (err) {
+    // If the Vercel Blob client errors (commonly due to missing credentials),
+    // don't crash the upload flow — warn and return an empty URL so callers
+    // can continue in local/dev mode.
+    console.warn('[warn] Vercel Blob upload failed, skipping upload:', err && err.message ? err.message : err);
+    return { url: '', storedName: '' };
+  }
 }
 
 /**

@@ -20,7 +20,49 @@
  *   final = round(0.6*skills + 0.3*keywords + 0.1*exp)
  */
 
-const { extractSkills } = require('./resumeParser');
+const { extractSkills, KNOWN_LOCATIONS } = require('./resumeParser');
+
+function extractJobLocation(text) {
+  const lower = String(text || '').toLowerCase();
+  const orderedLocations = [...KNOWN_LOCATIONS].sort((a, b) => b.length - a.length);
+  for (const loc of orderedLocations) {
+    if (lower.includes(loc)) {
+      return loc
+        .split(' ')
+        .map((w) => w[0].toUpperCase() + w.slice(1))
+        .join(' ');
+    }
+  }
+  return '';
+}
+
+function extractJobTitle(text) {
+  const normalized = String(text || '').replace(/\r\n|\r/g, '\n');
+  const labelMatch = normalized.match(/(?:^|\n)\s*(?:job title|position|role)\s*[:\-]?\s*([^\n]+)/i);
+  if (labelMatch) {
+    return labelMatch[1].trim();
+  }
+
+  const lines = normalized
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const titleKeywords = [
+    'manager', 'engineer', 'developer', 'designer', 'director', 'officer',
+    'analyst', 'consultant', 'specialist', 'coordinator', 'administrator',
+    'architect', 'lead', 'supervisor', 'executive', 'sales', 'assistant',
+    'trainer', 'operator', 'associate', 'advisor', 'scientist', 'technician',
+  ];
+
+  for (const line of lines.slice(0, 6)) {
+    const lower = line.toLowerCase();
+    if (titleKeywords.some((keyword) => lower.includes(keyword))) {
+      return line;
+    }
+  }
+  return '';
+}
 
 // Words we always ignore when picking out "keywords" from the JD —
 // otherwise every resume would match "the", "and", "with", etc.
@@ -115,16 +157,40 @@ function matchResumeToJob(resume, jobDescription) {
   }
 
   // -- Skills comparison --------------------------------------------------
-  const jdSkills = extractSkills(jdText);
-  const resumeSkills = (resume.skills || []).map((s) => s.toLowerCase());
+  const jdSkills = extractSkills(jdText).map((s) => String(s).trim().toLowerCase());
+  const resumeSkills = Array.from(
+    new Set(
+      (resume.skills || [])
+        .map((s) => String(s).trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
 
-  const matchedSkills = jdSkills.filter((s) => resumeSkills.includes(s));
-  const missingSkills = jdSkills.filter((s) => !resumeSkills.includes(s));
-  const extraSkills = resumeSkills.filter((s) => !jdSkills.includes(s));
+  const jdSkillSet = new Set(jdSkills);
+  const resumeSkillSet = new Set(resumeSkills);
+
+  const matchedSkills = jdSkills.filter((s) => resumeSkillSet.has(s));
+  const missingSkills = jdSkills.filter((s) => !resumeSkillSet.has(s));
+  const extraSkills = resumeSkills.filter((s) => !jdSkillSet.has(s));
+
+  // -- Location comparison -----------------------------------------------
+  const resumeLocation = String(resume.location || '').trim();
+  const jobLocation = extractJobLocation(jdText);
+  const locationMatch =
+    resumeLocation && jobLocation
+      ? resumeLocation.toLowerCase() === jobLocation.toLowerCase()
+      : false;
+
+  const resumeTitle = String(resume.position || '').trim();
+  const jobTitle = extractJobTitle(jdText);
+  const titleMatch =
+    resumeTitle && jobTitle
+      ? resumeTitle.toLowerCase() === jobTitle.toLowerCase()
+      : false;
 
   // -- Keyword comparison (meaningful nouns/verbs from the JD) ------------
   const jdKeywords = extractKeywords(jdText).filter(
-    (k) => !jdSkills.includes(k) // already counted in skills
+    (k) => !jdSkillSet.has(k) // already counted in skills
   );
   const resumeText = (resume.rawText || '').toLowerCase();
   const matchedKeywords = jdKeywords.filter((k) => resumeText.includes(k));
@@ -199,6 +265,16 @@ function matchResumeToJob(resume, jobDescription) {
     extraSkills,
     matchedKeywords: matchedKeywords.slice(0, 15),
     missingKeywords: missingKeywords.slice(0, 15),
+    location: {
+      resume: resumeLocation,
+      job: jobLocation,
+      matches: locationMatch,
+    },
+    jobTitle: {
+      resume: resumeTitle,
+      job: jobTitle,
+      matches: titleMatch,
+    },
     experience: {
       required: requiredYears,
       candidate: candidateYears,

@@ -38,21 +38,40 @@ async function uploadResume(req, res, next) {
       return res.status(404).json({ error: 'Category not found' });
     }
 
-    // Parse the resume directly from the in-memory buffer.
-    const parsed = await parseResumeFromBuffer(
-      req.file.buffer,
-      req.file.mimetype
-    );
+    // Parse the resume directly from the in-memory buffer. Return a
+    // helpful 400 when parsing fails (user-supplied file issues).
+    let parsed;
+    try {
+      parsed = await parseResumeFromBuffer(req.file.buffer, req.file.mimetype);
+    } catch (err) {
+      if (err && err.code === 'RESUME_PARSE_FAILED') {
+        return res.status(err.status || 400).json({ error: err.message });
+      }
+      throw err;
+    }
 
     // Push the file to Vercel Blob so we can serve downloads later.
-    const { url, storedName } = await uploadResumeFile(
-      req.file.buffer,
-      req.file.originalname,
-      req.file.mimetype
-    );
-    uploadedBlobUrl = url;
+    let url = '';
+    let storedName = '';
+    try {
+      const result = await uploadResumeFile(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+      url = result.url || '';
+      storedName = result.storedName || '';
+      uploadedBlobUrl = url || null;
+    } catch (err) {
+      // If blob upload fails for environmental reasons, warn but continue
+      // — the app supports operating without blob storage in local dev.
+      console.warn('[warn] blob upload failed in controller:', err && err.message ? err.message : err);
+      uploadedBlobUrl = null;
+    }
 
-    const resume = await Resume.create({
+    let resume;
+    try {
+      resume = await Resume.create({
       category: category._id,
       owner: ownerId,
       originalName: req.file.originalname,
@@ -62,15 +81,21 @@ async function uploadResume(req, res, next) {
       sizeBytes: req.file.size,
       ...parsed,
     });
+    } catch (err) {
+      // If we uploaded to Blob but DB write failed, clean up the blob.
+      if (uploadedBlobUrl) {
+        try {
+          await deleteResumeFile(uploadedBlobUrl);
+        } catch (delErr) {
+          console.warn('[warn] failed to delete blob after DB error:', delErr && delErr.message ? delErr.message : delErr);
+        }
+      }
+      return next(err);
+    }
 
     const populated = await resume.populate('category', 'name');
-    res.status(201).json(populated);
+    return res.status(201).json(populated);
   } catch (err) {
-    // If we already uploaded to Blob but the DB write failed, don't
-    // leak an orphaned file — clean up before propagating the error.
-    if (uploadedBlobUrl) {
-      await deleteResumeFile(uploadedBlobUrl);
-    }
     next(err);
   }
 }
@@ -141,6 +166,10 @@ async function downloadResume(req, res, next) {
       owner: req.user._id,
     });
     if (!resume) return res.status(404).json({ error: 'Resume not found' });
+    // If there's no Blob URL (local dev with Blob disabled), return 404.
+    if (!resume.fileUrl) {
+      return res.status(404).json({ error: 'File not available' });
+    }
     // Blob URLs are directly downloadable — 302 the browser at it and
     // let Vercel Blob serve the bytes.
     res.redirect(resume.fileUrl);

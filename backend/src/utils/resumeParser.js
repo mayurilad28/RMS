@@ -22,6 +22,15 @@ const fs = require('fs/promises');
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+let _ocrWorker = null;
+let _ocrInitializing = null;
+try {
+  // optional dependency — may be heavy but enables OCR for images
+  // lazy-require so environments without the package won't crash at import time
+  var { createWorker } = require('tesseract.js');
+} catch (err) {
+  createWorker = null; // will disable OCR if not installed
+}
 
 // pdfjs-dist is the official Mozilla PDF library — slower than pdf-parse but
 // far more tolerant of non-standard PDFs (Indeed/LinkedIn exports, etc.).
@@ -88,27 +97,87 @@ async function extractPdfText(buffer) {
 
 const KNOWN_SKILLS = [
   // Frontend
-  'html', 'css', 'sass', 'scss', 'tailwind', 'bootstrap',
+  'html', 'html5', 'css', 'css3', 'css2', 'sass', 'scss', 'tailwind', 'bootstrap',
   'javascript', 'typescript',
-  'angular', 'react', 'vue', 'next.js', 'nuxt', 'redux', 'rxjs', 'ngrx',
+  'angular', 'react', 'reactjs', 'vue', 'vue.js', 'vuejs', 'next.js', 'nextjs', 'nuxt', 'redux', 'rxjs', 'ngrx',
   // Backend
-  'node.js', 'nodejs', 'express', 'nestjs', 'fastify',
+  'node.js', 'nodejs', 'express', 'expressjs', 'nestjs', 'fastify',
   'python', 'django', 'flask', 'fastapi',
-  'java', 'spring', 'spring boot',
-  'c#', '.net', 'asp.net',
+  'java', 'spring', 'spring boot', 'springboot',
+  'c#', '.net', 'asp.net', 'aspnet',
   'go', 'golang', 'rust', 'php', 'laravel', 'ruby', 'rails',
   // Databases
   'mongodb', 'mongoose', 'mysql', 'postgresql', 'postgres', 'sqlite',
   'redis', 'elasticsearch', 'dynamodb',
   // DevOps / Cloud
-  'docker', 'kubernetes', 'jenkins', 'github actions', 'gitlab ci',
+  'docker', 'kubernetes', 'jenkins', 'github actions', 'githubactions', 'gitlab ci', 'gitlabci',
   'aws', 'azure', 'gcp', 'terraform', 'ansible',
   // QA
   'selenium', 'cypress', 'playwright', 'jest', 'mocha', 'chai',
   'junit', 'testng', 'postman', 'jmeter',
-  // Other
-  'git', 'rest', 'graphql', 'agile', 'scrum',
+  // Other IT
+  'git', 'rest', 'graphql', 'agile', 'scrum', 'ci/cd', 'cicd',
+  // ============ NON-IT SKILLS ============
+  // Hospitality & Hotel Management
+  'guest service', 'hospitality', 'front desk', 'housekeeping', 'reservation',
+  'hotel management', 'concierge', 'room service', 'check-in', 'check-out',
+  'amenities', 'catering', 'event management', 'f&b', 'food and beverage',
+  'customer service', 'complaint resolution', 'guest relations',
+  // Sales & Marketing
+  'sales', 'lead generation', 'cold calling', 'prospecting', 'sales pipeline',
+  'crm', 'salesforce', 'negotiation', 'quota', 'sales strategy',
+  'account management', 'client retention', 'upsell', 'cross-sell',
+  'marketing', 'digital marketing', 'seo', 'content marketing', 'social media',
+  'advertising', 'campaign management', 'brand management', 'market research',
+  // HR & Recruitment
+  'recruitment', 'hiring', 'onboarding', 'employee relations', 'hr management',
+  'payroll', 'benefits administration', 'performance management', 'training',
+  'talent management', 'compliance', 'employee engagement', 'compensation',
+  // Accounting & Finance
+  'accounting', 'bookkeeping', 'tax', 'reconciliation', 'financial reporting',
+  'gaap', 'budgeting', 'financial analysis', 'audit', 'accounts payable',
+  'accounts receivable', 'general ledger', 'excel', 'quickbooks', 'sap',
+  'cost analysis', 'forecasting', 'cash flow',
+  // Management & Leadership
+  'project management', 'team management', 'leadership', 'delegation',
+  'strategic planning', 'budget management', 'performance metrics', 'kpi',
+  'process improvement', 'workflow optimization', 'risk management',
+  'vendor management', 'stakeholder management', 'decision making',
+  // Operations
+  'operations', 'supply chain', 'logistics', 'inventory management',
+  'warehouse management', 'procurement', 'vendor relations', 'scheduling',
+  'quality control', 'compliance', 'documentation', 'system administration',
+  // Office & Administrative
+  'ms office', 'word', 'excel', 'powerpoint', 'outlook', 'google workspace',
+  'admin', 'data entry', 'scheduling', 'office management', 'customer support',
 ];
+
+const SKILL_CANONICAL = new Map([
+  ['html5', 'html'],
+  ['css3', 'css'],
+  ['css2', 'css'],
+  ['vue.js', 'vue'],
+  ['vuejs', 'vue'],
+  ['reactjs', 'react'],
+  ['nextjs', 'next.js'],
+  ['nodejs', 'node.js'],
+  ['expressjs', 'express'],
+  ['springboot', 'spring boot'],
+  ['aspnet', 'asp.net'],
+  ['githubactions', 'github actions'],
+  ['gitlabci', 'gitlab ci'],
+  ['cicd', 'ci/cd'],
+  // Non-IT canonical forms
+  ['f&b', 'food and beverage'],
+  ['crm', 'crm'],
+  ['salesforce', 'salesforce'],
+  ['payroll', 'payroll'],
+  ['hr', 'hr management'],
+  ['project management', 'project management'],
+  ['ms office', 'ms office'],
+  ['google workspace', 'google workspace'],
+  ['quickbooks', 'quickbooks'],
+]);
 
 const KNOWN_LOCATIONS = [
   'pune', 'mumbai', 'bangalore', 'bengaluru', 'hyderabad', 'chennai',
@@ -129,6 +198,28 @@ function makeParseError(message) {
 }
 
 async function extractTextFromBuffer(buffer, mimeType) {
+  // Handle image OCR when Tesseract is available
+  if (createWorker && String(mimeType || '').startsWith('image/')) {
+    try {
+      if (!_ocrWorker) {
+        if (!_ocrInitializing) {
+          _ocrInitializing = (async () => {
+            _ocrWorker = createWorker();
+            await _ocrWorker.load();
+            await _ocrWorker.loadLanguage('eng');
+            await _ocrWorker.initialize('eng');
+          })();
+        }
+        await _ocrInitializing;
+      }
+      const { data } = await _ocrWorker.recognize(buffer);
+      return data?.text || '';
+    } catch (err) {
+      // Fall back: don't block parsing if OCR fails — surface a warning
+      console.warn('[ocr] OCR failed:', err && err.message ? err.message : err);
+      return '';
+    }
+  }
   if (mimeType === 'application/pdf') {
     return extractPdfText(buffer);
   }
@@ -166,15 +257,50 @@ async function extractText(filePath, mimeType) {
 
 function extractInfoFromText(text) {
   const cleaned = text.replace(/\u0000/g, '');
+  const titleResult = extractResumeTitle(cleaned);
   return {
     rawText: cleaned,
     candidateName: extractCandidateName(cleaned),
+    position: titleResult.position,
+    positionSource: titleResult.source,
     email: extractEmail(cleaned),
     phone: extractPhone(cleaned),
     location: extractLocation(cleaned),
     skills: extractSkills(cleaned),
     experienceYears: extractExperienceYears(cleaned),
   };
+}
+
+function extractResumeTitle(text) {
+  const normalized = text.replace(/\r\n|\r/g, '\n');
+  const labelMatch = normalized.match(/(?:^|\n)\s*(?:title|position|role)\s*[:\-]?\s*([^\n]+)/i);
+  if (labelMatch) {
+    return { position: labelMatch[1].trim(), source: 'explicit' };
+  }
+
+  const lines = normalized
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const titleKeywords = [
+    'manager', 'engineer', 'developer', 'designer', 'director', 'officer',
+    'analyst', 'consultant', 'specialist', 'coordinator', 'administrator',
+    'architect', 'lead', 'supervisor', 'executive', 'sales', 'assistant',
+    'trainer', 'owner', 'head', 'owner', 'operator', 'staff', 'associate',
+  ];
+
+  for (const line of lines.slice(0, 8)) {
+    if (/\b\d{2,}\b/.test(line)) continue;
+    if (/[@|\w+\.]+@/.test(line)) continue;
+    if (/\+?\d[\d\s\-()]{6,}/.test(line)) continue;
+    if (/^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(line)) continue;
+    const lower = line.toLowerCase();
+    if (titleKeywords.some((keyword) => lower.includes(keyword))) {
+      return { position: line, source: 'inferred' };
+    }
+  }
+  return { position: '', source: 'none' };
 }
 
 function extractEmail(text) {
@@ -209,8 +335,15 @@ function extractCandidateName(text) {
 }
 
 function extractLocation(text) {
+  const normalized = text.replace(/\r\n|\r/g, '\n');
+  const labelMatch = normalized.match(/(?:^|\n)\s*(?:location|current location|address)\s*[:\-]?\s*([^\n]+)/i);
+  if (labelMatch) {
+    return labelMatch[1].trim().replace(/\s+/g, ' ').replace(/[\s,;]+$/g, '');
+  }
+
   const lower = text.toLowerCase();
-  for (const loc of KNOWN_LOCATIONS) {
+  const orderedLocations = [...KNOWN_LOCATIONS].sort((a, b) => b.length - a.length);
+  for (const loc of orderedLocations) {
     if (lower.includes(loc)) {
       return loc
         .split(' ')
@@ -225,15 +358,13 @@ function extractSkills(text) {
   const lower = text.toLowerCase();
   const found = new Set();
   for (const skill of KNOWN_SKILLS) {
-    // \b doesn't work for tokens with `.` or `+`, so we check raw substring
-    // but require a non-letter boundary on both sides to avoid false hits
-    // (e.g. "go" inside "google").
     const idx = lower.indexOf(skill);
     if (idx === -1) continue;
     const before = lower[idx - 1] || ' ';
     const after = lower[idx + skill.length] || ' ';
     if (/[a-z0-9]/.test(before) || /[a-z0-9]/.test(after)) continue;
-    found.add(skill);
+    const canonical = SKILL_CANONICAL.get(skill) || skill;
+    found.add(canonical);
   }
   return Array.from(found);
 }
@@ -273,7 +404,9 @@ module.exports = {
   parseResumeFromBuffer,
   extractTextFromBuffer,
   extractSkills,
+  extractLocation,
   KNOWN_SKILLS,
+  KNOWN_LOCATIONS,
   // exported for unit tests / experimentation
   _internals: {
     extractEmail,

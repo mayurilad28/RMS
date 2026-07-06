@@ -54,6 +54,8 @@ async function quickScan(req, res, next) {
     res.json({
       resume: {
         candidateName: parsed.candidateName,
+        position: parsed.position,
+        positionSource: parsed.positionSource,
         email: parsed.email,
         phone: parsed.phone,
         location: parsed.location,

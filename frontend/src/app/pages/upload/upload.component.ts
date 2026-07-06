@@ -42,7 +42,7 @@ import { ResumeService } from '../../services/resume.service';
       </div>
 
       <button (click)="upload()" [disabled]="!canUpload()">
-        {{ uploading() ? 'Uploading…' : 'Upload & Scan' }}
+        {{ uploading() ? 'Uploading…' : 'Upload' }}
       </button>
 
       @if (error()) {

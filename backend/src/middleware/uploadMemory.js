@@ -13,6 +13,11 @@ const ALLOWED_MIME = new Set([
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/plain',
+  // Image formats for OCR
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/tiff',
 ]);
 
 function fileFilter(_req, file, cb) {

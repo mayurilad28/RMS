@@ -30,8 +30,8 @@ const resumeSchema = new mongoose.Schema(
     // cloud storage); we keep the metadata + the Blob URL here so
     // downloads can redirect to it.
     originalName: { type: String, required: true },
-    storedName: { type: String, required: true },
-    fileUrl: { type: String, required: true },
+    storedName: { type: String, required: false, default: '' },
+    fileUrl: { type: String, required: false, default: '' },
     mimeType: { type: String, required: true },
     sizeBytes: { type: Number, required: true },
 
