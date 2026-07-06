@@ -1,17 +1,24 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm run install:all",
-  "buildCommand": "npm run build",
-  "outputDirectory": "frontend/dist/resume-scanner-frontend/browser",
   "framework": null,
+  "installCommand": "npm run install:all",
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": "frontend/dist/resume-scanner-frontend",
   "functions": {
     "api/index.js": {
-      "includeFiles": "backend/**",
+      "includeFiles": [
+        "backend/**"
+      ],
       "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "handle": "filesystem"
+    }
   ]
 }
